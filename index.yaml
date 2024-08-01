@@ -3,6 +3,16 @@ entries:
   vault-autounseal:
   - apiVersion: v2
     appVersion: v1.0.1
+    created: "2024-08-01T10:39:21.497319435Z"
+    description: A Helm chart for Kubernetes
+    digest: 40867b1b6eaada7a3bccf2e71fd0ec025d7c1ba7a0f312bc8bd19b6e846aeb03
+    name: vault-autounseal
+    type: application
+    urls:
+    - https://github.com/pyToshka/vault-autounseal/releases/download/vault-autounseal-0.5.3/vault-autounseal-0.5.3.tgz
+    version: 0.5.3
+  - apiVersion: v2
+    appVersion: v1.0.1
     created: "2024-03-01T05:00:58.810954225Z"
     description: A Helm chart for Kubernetes
     digest: cfc91953cc5f1ee782100b47fdc94e7f6e12051f3d7bdc8d8eff221426fd4430
@@ -11,4 +21,4 @@ entries:
     urls:
     - https://github.com/pyToshka/vault-autounseal/releases/download/vault-autounseal-0.5.2/vault-autounseal-0.5.2.tgz
     version: 0.5.2
-generated: "2024-03-01T05:00:58.810960226Z"
+generated: "2024-08-01T10:39:21.497331979Z"
