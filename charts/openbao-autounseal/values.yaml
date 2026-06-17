@@ -25,16 +25,26 @@ serviceAccount:
 
 podAnnotations: {}
 
-podSecurityContext: {}
-  # fsGroup: 2000
+# Hardened by default. The image is gcr.io/distroless/python3-debian13:nonroot
+# (uid/gid 65532) and the controller writes nothing to disk, so it runs as
+# non-root with a read-only root filesystem and no capabilities. Satisfies the
+# PodSecurity "restricted" profile out of the box.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
 
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
+  capabilities:
+    drop:
+      - ALL
 
 
 resources: {}

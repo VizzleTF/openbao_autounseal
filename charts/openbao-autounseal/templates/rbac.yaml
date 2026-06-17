@@ -1,16 +1,27 @@
-kind: ClusterRole
+{{/*
+Namespaced Role, least privilege. The controller only:
+  - lists pods (discovery)        -> pods: list
+  - reads/creates/deletes secrets -> secrets: get, create, delete
+in its own namespace, so a namespaced Role/RoleBinding is enough — no
+cluster-wide access and none of the verbs it never calls (watch/update/patch).
+*/}}
 apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
 metadata:
   name: {{ include "openbao-autounseal.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "openbao-autounseal.labels" . | nindent 4 }}
 rules:
-- apiGroups: [""]
-  resources: [ "secrets", "pods" ]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
   name: {{ include "openbao-autounseal.fullname" . }}
   namespace: {{ .Release.Namespace }}
@@ -22,5 +33,5 @@ subjects:
     namespace: {{ .Release.Namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
+  kind: Role
   name: {{ include "openbao-autounseal.fullname" . }}
