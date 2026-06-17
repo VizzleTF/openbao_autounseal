@@ -8,3 +8,9 @@ curator.yml
 data
 venv
 tmp
+
+# Test / coverage artifacts
+coverage.xml
+.coverage
+.pytest_cache/
+__pycache__/
