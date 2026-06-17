@@ -145,12 +145,12 @@ def get_seal_status(openbao_instance_url, openbao_status):
                 return status_error
             create_secrets(init_result)
 
-            logger.info("Unsealing OpenBao node {}", replica_url)
+            logger.info("Unsealing OpenBao node {}", openbao_instance_url)
             read_secret(openbao_keys, openbao_instance_url)
 
             return status_init
         if get_seal.json()["sealed"]:
-            logger.info("Unsealing OpenBao node {}", replica_url)
+            logger.info("Unsealing OpenBao node {}", openbao_instance_url)
             read_secret(openbao_keys, openbao_instance_url)
 
             return status_unseal
@@ -190,7 +190,7 @@ def get_quorum_established(quorum_established, replica_list, main_url):
             if "leader_address" not in leader_status.json():
                 quorum_established = False
                 logger.info(
-                    "OpenBao node {} is not ready: {} ", replica_url, leader_status.json()
+                    "OpenBao node {} is not ready: {} ", openbao_instance_url, leader_status.json()
                 )
                 continue
             if leader_status.json()["leader_address"] == main_url:
@@ -242,7 +242,7 @@ def wait_for_quorum(replica_list, main_url):
             logger.info("Unexpected error {}", connection_error)
             return status_error
 
-        logger.info("Unsealing {}", replica_url)
+        logger.info("Joined {} to the raft quorum", openbao_instance_url)
         read_secret(openbao_keys, openbao_instance_url)
 
     quorum_established = False
@@ -309,7 +309,7 @@ if __name__ == "__main__":
     missing = [k for k in required if not os.environ.get(k)]
     if missing:
         print("Missing required environment variable(s): {}".format(", ".join(missing)))
-        exit(2)
+        sys.exit(2)
 
     openbao_url = os.environ["OPENBAO_URL"]
     secret_shares = os.environ["OPENBAO_SECRET_SHARES"]
@@ -323,7 +323,7 @@ if __name__ == "__main__":
 
     if pod_retrieval_max_retries <= 0:
         print("OPENBAO_POD_RETRIEVAL_MAX_RETRIES must be >= 1, got {}".format(pod_retrieval_max_retries))
-        exit(2)
+        sys.exit(2)
     logger.remove()
     logger.add(sys.stderr, format=tracing_formatter)
     logger.info("Start OpenBao auto unseal")

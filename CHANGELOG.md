@@ -6,6 +6,13 @@ upstream 0.5.2 release. Upstream had already fixed the pod discovery on its
 `main` branch but never shipped a release image past 0.5.2, so the fork exists
 to publish a pinnable, OpenBao-native build.
 
+## 0.5.11
+
+Cleanups from a second review pass. The quorum and unseal log lines now name the
+node they're acting on instead of a stale module-global, so the logs match
+reality during HA operations. Startup uses sys.exit (the bare exit builtin isn't
+guaranteed outside the site module), and the configmap quotes its string values.
+
 ## 0.5.10
 
 Startup validates the required env vars and exits with a clear message if one is

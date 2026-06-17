@@ -8,7 +8,7 @@ image:
   repository: ghcr.io/vizzletf/openbao-autounseal
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: ""  # defaults to .Chart.AppVersion (0.5.4)
+  tag: ""  # defaults to .Chart.AppVersion
 
 imagePullSecrets: []
 nameOverride: ""
