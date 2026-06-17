@@ -18,6 +18,11 @@ import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# (connect, read) timeout for every OpenBao HTTP call. Without it a discovered
+# pod that disappears (deleted/rescheduled) makes requests block forever and the
+# scan loop hangs silently — the pod stays Ready but never unseals anything.
+REQUEST_TIMEOUT = (5, 30)
+
 
 def get_kubernetes_client():
     try:
@@ -54,6 +59,7 @@ def init_openbao(openbao_instance_url):
             f"{openbao_instance_url}/v1/sys/init",
             data=json.dumps(auto_unseal_payload),
             verify=False,  # nosec
+            timeout=REQUEST_TIMEOUT,
         )
         response = init_openbao_request.json()
         return response
@@ -104,6 +110,7 @@ def openbao_unseal(key, openbao_instance_url):
             f"{openbao_instance_url}/v1/sys/unseal",
             data=json.dumps(payload),
             verify=False,  # nosec
+            timeout=REQUEST_TIMEOUT,
         )
     except requests.exceptions.ConnectionError as unseal_error:
         logger.error("During unseal got error", unseal_error)
@@ -116,7 +123,9 @@ def openbao_unseal(key, openbao_instance_url):
 def get_seal_status(openbao_instance_url, openbao_status):
     try:
         get_seal = requests.get(
-            f"{openbao_instance_url}/v1/sys/seal-status", verify=False  # nosec
+            f"{openbao_instance_url}/v1/sys/seal-status",
+            verify=False,  # nosec
+            timeout=REQUEST_TIMEOUT,
         )
         if not get_seal.json()["initialized"]:
             if openbao_status:
@@ -166,7 +175,9 @@ def get_quorum_established(quorum_established, replica_list, main_url):
                 continue
 
             leader_status = requests.get(
-                f"{openbao_instance_url}/v1/sys/leader", verify=False  # nosec
+                f"{openbao_instance_url}/v1/sys/leader",
+                verify=False,  # nosec
+                timeout=REQUEST_TIMEOUT,
             )
 
             if "leader_address" not in leader_status.json():
@@ -196,7 +207,9 @@ def get_quorum_established(quorum_established, replica_list, main_url):
 
 def wait_for_quorum(replica_list, main_url):
     payload = {"leader_api_addr": main_url}
-    leader_status = requests.get(f"{main_url}/v1/sys/leader", verify=False)  # nosec
+    leader_status = requests.get(
+        f"{main_url}/v1/sys/leader", verify=False, timeout=REQUEST_TIMEOUT  # nosec
+    )
     logger.info(
         "Leader http code {}, response json {}",
         leader_status.status_code,
@@ -212,6 +225,7 @@ def wait_for_quorum(replica_list, main_url):
                 f"{openbao_instance_url}/v1/sys/storage/raft/join",
                 data=json.dumps(payload),
                 verify=False,  # nosec
+                timeout=REQUEST_TIMEOUT,
             )
 
         except requests.exceptions.ConnectionError as connection_error:
