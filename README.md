@@ -1,4 +1,29 @@
-# vault-auto-unseal
+# openbao_autounseal
+
+> **Fork notes (VizzleTF).** Fork of [pyToshka/vault-autounseal](https://github.com/pyToshka/vault-autounseal),
+> adapted for [OpenBao](https://openbao.org) HA on Kubernetes.
+>
+> **Why this fork exists.** After a full reboot of all control-plane nodes, an
+> OpenBao HA StatefulSet (`podManagementPolicy: OrderedReady`, Shamir seal) came
+> up sealed and the upstream-released image (`opennix/vault-autounseal:vault-autounseal-0.5.2`)
+> never discovered it — `Discovered Vault instance(s): []` forever — leaving the
+> whole cluster's ExternalSecrets down. Two bugs in that released image:
+> 1. the pod label selector was hardcoded to `vault-sealed=true`, but the OpenBao
+>    Helm chart labels pods `openbao-sealed=true`;
+> 2. the pod list was fetched **once** before the scan loop, so a pod that
+>    appeared later (or had no IP yet) was never seen.
+>
+> Both are already fixed on upstream `main` (configurable `VAULT_LABEL_SELECTOR`,
+> env-driven; `get_vault_pods()` called every cycle — PR #41), but upstream only
+> published those fixes via floating `latest`/`main` tags, never a pinnable
+> release image past `0.5.2`.
+>
+> **What this fork does.** No application-code change is needed — `main` already
+> carries the fix. The fork only re-points CI to publish a **pinnable, multi-arch
+> image to GitHub Container Registry**: `ghcr.io/vizzletf/openbao-autounseal`
+> (built via the built-in `GITHUB_TOKEN`, no DockerHub secrets). Consume it with
+> `VAULT_LABEL_SELECTOR=app.kubernetes.io/instance=openbao,component=server`.
+
 ## Disclaimer
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
