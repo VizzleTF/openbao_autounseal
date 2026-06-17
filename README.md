@@ -1,5 +1,11 @@
 # openbao_autounseal
 
+[![Docker](https://github.com/VizzleTF/openbao_autounseal/actions/workflows/docker_publish.yaml/badge.svg)](https://github.com/VizzleTF/openbao_autounseal/actions/workflows/docker_publish.yaml)
+[![flake8](https://github.com/VizzleTF/openbao_autounseal/actions/workflows/flake8.yml/badge.svg)](https://github.com/VizzleTF/openbao_autounseal/actions/workflows/flake8.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=VizzleTF_openbao_autounseal&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=VizzleTF_openbao_autounseal)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=VizzleTF_openbao_autounseal&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=VizzleTF_openbao_autounseal)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=VizzleTF_openbao_autounseal&metric=coverage)](https://sonarcloud.io/summary/new_code?id=VizzleTF_openbao_autounseal)
+
 > **Fork notes (VizzleTF).** Fork of [pyToshka/vault-autounseal](https://github.com/pyToshka/vault-autounseal),
 > rebranded to **openbao-autounseal** for [OpenBao](https://openbao.org) HA on
 > Kubernetes (project name, image, Helm chart and env-var prefix all changed
