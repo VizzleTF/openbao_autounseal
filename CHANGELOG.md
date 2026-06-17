@@ -6,6 +6,16 @@ upstream 0.5.2 release. Upstream had already fixed the pod discovery on its
 `main` branch but never shipped a release image past 0.5.2, so the fork exists
 to publish a pinnable, OpenBao-native build.
 
+## 0.5.13
+
+Clears the remaining SonarCloud security hotspots. GitHub Actions are pinned to
+full commit SHAs (supply-chain), the runtime image declares an explicit non-root
+`USER 65532:65532` and copies only `app.py`/`requirements.txt` instead of the
+whole build context, and the chart's default `openbao_url` is now `https://`
+(the controller still skips cert verification for pod-IP TLS unless
+`OPENBAO_CA_CERT` / `OPENBAO_TLS_SKIP_VERIFY` say otherwise — override with an
+`http://` URL if your OpenBao service does not terminate TLS).
+
 ## 0.5.12
 
 Security hardening from a SonarCloud pass. TLS verification for OpenBao calls is

@@ -76,7 +76,10 @@ tolerations: []
 affinity: {}
 
 settings:
-  openbao_url: "http://openbao.openbao:8200"
+  # https by default; the controller skips cert verification for pod-IP TLS
+  # unless OPENBAO_CA_CERT / OPENBAO_TLS_SKIP_VERIFY say otherwise. Override with
+  # an http:// URL if your OpenBao service does not terminate TLS.
+  openbao_url: "https://openbao.openbao:8200"
   # openbao unlocking keys settings:
   openbao_secret_shares: 3
   openbao_secret_threshold: 3

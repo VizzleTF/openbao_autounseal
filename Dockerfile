@@ -3,7 +3,8 @@ LABEL description="OpenBao auto-unseal for Kubernetes"
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONFAULTHANDLER=1 \
     PYTHONUNBUFFERED=1
-COPY ./ /app
+# Copy only what the controller needs, not the whole build context.
+COPY app.py requirements.txt /app/
 WORKDIR /app
 # Versions are locked in requirements.txt; --only-binary blocks sdist code execution.
 RUN pip install --no-cache-dir --only-binary=:all: -r requirements.txt && rm -rf requirements.txt
@@ -23,4 +24,6 @@ ENV LANG=C.UTF-8 \
 COPY --from=build-env /app /app
 COPY --from=build-env /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 WORKDIR /app
+# Explicit non-root (matches the distroless :nonroot uid/gid 65532).
+USER 65532:65532
 CMD ["/app/app.py"]
