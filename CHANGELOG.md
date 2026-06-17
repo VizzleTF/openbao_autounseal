@@ -6,6 +6,34 @@ upstream 0.5.2 release. Upstream had already fixed the pod discovery on its
 `main` branch but never shipped a release image past 0.5.2, so the fork exists
 to publish a pinnable, OpenBao-native build.
 
+## 0.5.10
+
+Startup validates the required env vars and exits with a clear message if one is
+missing, instead of crashing deep in the loop with a TypeError. Pod discovery
+takes the namespace from the NAMESPACE env rather than splitting it out of the
+service URL, which broke on a bare hostname or an external address. Also bounded
+the quorum-wait loop so a stuck node can't spin it forever, made the generated
+secret keys strings, and stopped a failed init from crashing the unseal path.
+Added a liveness probe: the app touches /tmp/heartbeat each cycle and the probe
+restarts the pod if it goes stale, so a wedged loop recovers on its own.
+
+## 0.5.9
+
+Cut RBAC down to a namespaced Role with only the verbs the controller actually
+calls (list pods; get/create/delete secrets), replacing a cluster-wide
+ClusterRole that granted full CRUD on secrets everywhere. The pod also runs with
+a restricted securityContext by default: non-root (uid 65532), read-only root
+filesystem, all capabilities dropped, seccomp RuntimeDefault.
+
+## 0.5.8
+
+The scan loop now catches request and Kubernetes API errors and retries on the
+next cycle instead of letting them kill the process. 0.5.7 recovered from a
+vanished pod only by timing out and letting Kubernetes restart the container;
+now it recovers in place with no restart. Dependencies bumped to current
+versions with no known CVEs (pip-audit clean): kubernetes 36, requests 2.34.2,
+urllib3 2.7.0, certifi 2026.6.17, loguru 0.7.3.
+
 ## 0.5.7
 
 Added a connect/read timeout to every OpenBao HTTP call (init, unseal,
