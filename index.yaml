@@ -2,6 +2,16 @@ apiVersion: v1
 entries:
   openbao-autounseal:
   - apiVersion: v2
+    appVersion: 0.5.13
+    created: "2026-06-17T17:06:02.188299926Z"
+    description: A Helm chart for Kubernetes
+    digest: 3f917bd92a77c69953a4aa1992a884e566be262366810bdc76ef105913f504b9
+    name: openbao-autounseal
+    type: application
+    urls:
+    - https://github.com/VizzleTF/openbao_autounseal/releases/download/openbao-autounseal-0.5.13/openbao-autounseal-0.5.13.tgz
+    version: 0.5.13
+  - apiVersion: v2
     appVersion: 0.5.12
     created: "2026-06-17T14:59:52.511361387Z"
     description: A Helm chart for Kubernetes
@@ -71,4 +81,4 @@ entries:
     urls:
     - https://github.com/VizzleTF/openbao_autounseal/releases/download/openbao-autounseal-0.5.6/openbao-autounseal-0.5.6.tgz
     version: 0.5.6
-generated: "2026-06-17T14:59:52.511393337Z"
+generated: "2026-06-17T17:06:02.188345876Z"
