@@ -6,9 +6,9 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/vizzletf/openbao-autounseal
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "latest"
+  tag: ""  # defaults to .Chart.AppVersion (0.5.4)
 
 imagePullSecrets: []
 nameOverride: ""
@@ -56,10 +56,10 @@ tolerations: []
 affinity: {}
 
 settings:
-  # openbao_url: "https://openbao.openbao.cluster.local:8200"
+  openbao_url: "http://openbao.openbao:8200"
   # openbao unlocking keys settings:
   openbao_secret_shares: 3
-  openbao_secret_threshold: 2
+  openbao_secret_threshold: 3
   # secret for storing openbao root token
   openbao_root_token_secret: openbao-root-token
   # secret for storing openbao unlock keys
