@@ -68,6 +68,10 @@ livenessProbe:
   initialDelaySeconds: 15
   periodSeconds: 30
   failureThreshold: 3
+  # The probe spawns a full python3 interpreter (distroless has no shell), so a
+  # cold start under the 100m CPU limit can exceed the 1s default and the kubelet
+  # would kill a healthy pod. Give it real headroom.
+  timeoutSeconds: 5
 
 nodeSelector: {}
 

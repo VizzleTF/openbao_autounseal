@@ -6,6 +6,15 @@ upstream 0.5.2 release. Upstream had already fixed the pod discovery on its
 `main` branch but never shipped a release image past 0.5.2, so the fork exists
 to publish a pinnable, OpenBao-native build.
 
+## 0.5.15
+
+Fixes a CrashLoopBackOff from a flaky liveness probe. The probe execs a full
+`python3` interpreter (the distroless image has no shell), but no
+`timeoutSeconds` was set, so the kubelet's 1s default applied — a cold
+interpreter start under the 100m CPU limit routinely overran it and the kubelet
+killed a perfectly healthy pod (3 missed probes ≈ 2 min, matching the observed
+restarts). Adds a configurable `livenessProbe.timeoutSeconds` defaulting to 5s.
+
 ## 0.5.14
 
 The entrypoint is split into `configure()`, `scan_cycle()` and `main()` (no
