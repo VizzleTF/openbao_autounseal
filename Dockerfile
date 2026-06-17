@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY ./ /app
 WORKDIR /app
 # Versions are locked in requirements.txt; --only-binary blocks sdist code execution.
-RUN pip install --no-cache-dir --only-binary=:all: -r requirements.txt && rm -rf requirements.txt  # NOSONAR
+RUN pip install --no-cache-dir --only-binary=:all: -r requirements.txt && rm -rf requirements.txt
 
 # debian13 distroless ships Python 3.13 — must match the build-stage interpreter
 # (site-packages are version-pathed). Pinning the debian13 variant keeps runtime

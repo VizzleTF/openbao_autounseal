@@ -19,9 +19,9 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip  # NOSONAR
+        python -m pip install --upgrade pip
         pip install --only-binary=:all: flake8==7.1.2
-        if [ -f requirements.txt ]; then pip install --only-binary=:all: -r requirements.txt; fi  # NOSONAR
+        if [ -f requirements.txt ]; then pip install --only-binary=:all: -r requirements.txt; fi
     - name: Lint with flake8
       run: |
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics

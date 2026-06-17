@@ -45,7 +45,7 @@ TLS_VERIFY = resolve_tls_verify()
 # Touched at the start of every scan cycle; the liveness probe restarts the pod
 # if this file goes stale. Lives in an emptyDir mount so the root fs stays
 # read-only. Overridable for local runs.
-HEARTBEAT_FILE = os.environ.get("HEARTBEAT_FILE", "/tmp/heartbeat")  # NOSONAR: /tmp is a private per-pod emptyDir, not a shared world-writable dir
+HEARTBEAT_FILE = os.environ.get("HEARTBEAT_FILE", "/tmp/heartbeat")  # private per-pod emptyDir, not shared /tmp
 
 
 def get_kubernetes_client():
