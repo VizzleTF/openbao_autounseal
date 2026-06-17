@@ -1,7 +1,11 @@
-loguru==0.6.0
-kubernetes==29.0.0
-requests==2.32.0
+loguru==0.7.3
+kubernetes==36.0.2
+requests==2.34.2
 
-certifi==2024.7.4 # not directly required, pinned by Snyk to avoid a vulnerability
-rsa>=4.7.2
-urllib3>=2.2.2 # not directly required, pinned by Snyk to avoid a vulnerability
+# Transitive deps pinned to current releases to stay clear of known CVEs
+# (requests netrc leak CVE-2024-47081; urllib3 redirect CVE-2025-50181/50182).
+certifi==2026.6.17
+charset-normalizer==3.4.7
+idna==3.18
+urllib3==2.7.0
+rsa==4.9.1

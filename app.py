@@ -4,7 +4,6 @@ import json
 import os
 import sys
 import traceback
-import socket
 import datetime
 from itertools import takewhile
 from time import sleep
@@ -252,6 +251,7 @@ def get_openbao_pods():
         exit(2)
 
     tries = 0
+    pod_list = None
     while tries < pod_retrieval_max_retries:
         tries = tries + 1
         pod_list = api_instance.list_namespaced_pod(
@@ -259,20 +259,25 @@ def get_openbao_pods():
         )
 
         if len(pod_list.items) == 0:
-            logger.error("Not OpenBao pods found. Please make sure they are annotated with: {}", openbao_label_selector)
-            exit(2)
+            # No pods yet (e.g. cold cluster start). Don't exit — let the caller
+            # log an empty discovery and retry on the next scan cycle.
+            logger.warning("No OpenBao pods match selector {} yet", openbao_label_selector)
+            return pod_list
 
         openbao_pods_with_no_ip = [pod.metadata.name for pod in pod_list.items if pod.status.pod_ip is None]
 
         if len(openbao_pods_with_no_ip) > 0:
-            logger.warning("OpenBao pods have no assigned IP address: {}", openbao_pods_with_no_ip)
+            logger.warning("OpenBao pods have no assigned IP address yet: {}", openbao_pods_with_no_ip)
             sleep(scan_delay)
             continue
 
         return pod_list
 
-    logger.error("Waiting for OpenBao pods to be ready timed out. Will exit.")
-    exit(2)
+    # Retries exhausted: return what we have. The scan loop skips pods without an
+    # IP, so a slow-to-schedule replica just gets picked up on a later cycle
+    # instead of crashing the controller.
+    logger.warning("Some OpenBao pods still have no IP; proceeding with the ready ones")
+    return pod_list
 
 
 if __name__ == "__main__":
@@ -338,56 +343,43 @@ if __name__ == "__main__":
 
     while True:
         logger.info("Begin scan cycle")
-        # When running multiple openbao instances, the DNS query will return multiple IPs.
-        # We want to iterate over each of those IPs to ensure each replica is unsealed.
-
-        # getaddrinfo() returns a 5-touple of (family, type, proto, canonname, sockaddr)
-        # Index 4 (sockaddr) is a touple of (ip_addr, port), so we're extracting
-        # index 4 (the ip addr touple) and then indexing into that touple to get the
-        # actual ip address (index 0) and the port (index 1).
-
-        # Then use list comprehension to return a list of "http://{ip_addr}:{port}" to
-        # iterate over
+        # Discover the current OpenBao pods (by label selector) on every cycle, so
+        # a deleted/rescheduled pod with a new IP is picked up. A failed HTTP call
+        # or k8s API error is logged and retried next cycle instead of killing the
+        # process — a discovered pod that disappears must not wedge the loop.
         try:
+            pods = get_openbao_pods()
             openbao_replicas = sorted(
-                [
-                    f"{url.scheme}://{x[4][0]}:{x[4][1]}"
-                    for x in socket.getaddrinfo(
-                    openbao_hostname, openbao_port, proto=socket.IPPROTO_TCP
-                )
-                ]
+                f"{url.scheme}://{pod.status.pod_ip}:{openbao_port}"
+                for pod in pods.items
+                if pod.status.pod_ip
             )
-        except socket.gaierror as err:
-            logger.error("Failed to lookup DNS info: {}", err)
-            sleep(5)
-            continue
-        openbao_replicas.clear()
-
-        pods = get_openbao_pods()
-        for pod in pods.items:
-            openbao_replicas.append(f"{url.scheme}://{pod.status.pod_ip}:{openbao_port}")
-        logger.info("Discovered OpenBao instance(s): {}", openbao_replicas)
-        for replica_url in openbao_replicas:
-            status = get_seal_status(replica_url, openbao_initialized)
-            if status == status_init:
-                if len(openbao_replicas) > 1:
+            logger.info("Discovered OpenBao instance(s): {}", openbao_replicas)
+            for replica_url in openbao_replicas:
+                status = get_seal_status(replica_url, openbao_initialized)
+                if status == status_init:
+                    if len(openbao_replicas) > 1:
+                        logger.info(
+                            "OpenBao running in High Availability mode will unseal OpenBao nodes one by one"
+                        )
+                    else:
+                        logger.info("OpenBao running in Single Node mode will unseal")
+                    # Only set the Leader URL once
+                    if not openbao_initialized:
+                        openbao_initialized = True
+                        leader_url = replica_url
                     logger.info(
-                        "OpenBao running in High Availability mode will unseal OpenBao nodes one by one"
+                        "OpenBao was just initialized, waiting for quorum to be established"
                     )
-                else:
-                    logger.info("OpenBao running in Singe Node mode will unseal")
-                # Only set the Leader URL once
-                if not openbao_initialized:
-                    openbao_initialized = True
-                    leader_url = replica_url
-                logger.info(
-                    "OpenBao was just initialized, waiting for quorum to be established"
-                )
-                wait_for_quorum(openbao_replicas, leader_url)
+                    wait_for_quorum(openbao_replicas, leader_url)
 
-            if status == status_unseal:
-                # If we've unsealed an instance, then by definition openbao has been initialized
-                openbao_initialized = True
-                logger.info("OpenBao has been unsealed")
+                if status == status_unseal:
+                    # If we've unsealed an instance, then by definition openbao has been initialized
+                    openbao_initialized = True
+                    logger.info("OpenBao has been unsealed")
+        except requests.exceptions.RequestException as err:
+            logger.warning("OpenBao request failed this cycle, retrying next scan: {}", err)
+        except kubernetes.client.exceptions.ApiException as err:
+            logger.warning("Kubernetes API error this cycle, retrying next scan: {}", err)
 
         sleep(scan_delay)
