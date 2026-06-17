@@ -2,7 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
-vault
+openbao
 config.json
 curator.yml
 data

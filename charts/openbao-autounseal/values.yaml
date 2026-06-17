@@ -1,11 +1,11 @@
-# Default values for vault-autounseal.
+# Default values for openbao-autounseal.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
 replicaCount: 1
 
 image:
-  repository: opennix/vault-autounseal
+  repository: ghcr.io/vizzletf/openbao-autounseal
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
@@ -56,15 +56,15 @@ tolerations: []
 affinity: {}
 
 settings:
-  # vault_url: "https://vault.vault.cluster.local:8200"
-  # vault unlocking keys settings:
-  vault_secret_shares: 3
-  vault_secret_threshold: 2
-  # secret for storing vault root token
-  vault_root_token_secret: vault-root-token
-  # secret for storing vault unlock keys
-  vault_keys_secret: vault-keys
-  # time between polling for vault status, in seconds
+  # openbao_url: "https://openbao.openbao.cluster.local:8200"
+  # openbao unlocking keys settings:
+  openbao_secret_shares: 3
+  openbao_secret_threshold: 2
+  # secret for storing openbao root token
+  openbao_root_token_secret: openbao-root-token
+  # secret for storing openbao unlock keys
+  openbao_keys_secret: openbao-keys
+  # time between polling for openbao status, in seconds
   scan_delay: 5
-  # vault label to use to retrieve vault instance
-  vault_label_selector: app.kubernetes.io/instance=vault,component=server
+  # openbao label to use to retrieve openbao instance
+  openbao_label_selector: app.kubernetes.io/instance=openbao,component=server

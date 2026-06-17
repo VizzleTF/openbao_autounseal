@@ -47,20 +47,20 @@ def list_convert(lst):
     return converted_dict
 
 
-def init_vault(vault_instance_url):
+def init_openbao(openbao_instance_url):
     try:
-        logger.info(f"Initializing Vault at {vault_instance_url}")
-        init_vault_request = requests.put(
-            f"{vault_instance_url}/v1/sys/init",
+        logger.info(f"Initializing OpenBao at {openbao_instance_url}")
+        init_openbao_request = requests.put(
+            f"{openbao_instance_url}/v1/sys/init",
             data=json.dumps(auto_unseal_payload),
             verify=False,  # nosec
         )
-        response = init_vault_request.json()
+        response = init_openbao_request.json()
         return response
-    except requests.exceptions.ConnectionError as init_vault_error:
+    except requests.exceptions.ConnectionError as init_openbao_error:
         logger.info(
-            "Got ConnectionError for  {}. Please check Vault api url/port",
-            init_vault_error,
+            "Got ConnectionError for  {}. Please check OpenBao api url/port",
+            init_openbao_error,
         )
 
 
@@ -71,24 +71,24 @@ def create_secrets(secret):
     try:
         api_instance.create_namespaced_secret(namespace=namespace, body=k8s_secret)
     except kubernetes.client.exceptions.ApiException as create_secret_error:
-        logger.error("Error during creation on Vault secret {}", create_secret_error)
+        logger.error("Error during creation on OpenBao secret {}", create_secret_error)
 
-    k8s_secret.metadata = client.V1ObjectMeta(name=vault_keys)
+    k8s_secret.metadata = client.V1ObjectMeta(name=openbao_keys)
     k8s_secret.type = "Opaque"
     k8s_secret.string_data = list_convert(secret["keys"])
     try:
         api_instance.create_namespaced_secret(namespace=namespace, body=k8s_secret)
     except kubernetes.client.exceptions.ApiException as create_secret_error:
-        logger.error("Error during creation on Vault secret {}", create_secret_error)
+        logger.error("Error during creation on OpenBao secret {}", create_secret_error)
 
 
-def read_secret(name, vault_instance_url):
+def read_secret(name, openbao_instance_url):
     secret_client = api_instance.read_namespaced_secret(
         name=name, namespace=namespace
     ).data
     for secret in secret_client.values():
         key = base64.b64decode(secret)
-        vault_unseal(key.decode(), vault_instance_url)
+        openbao_unseal(key.decode(), openbao_instance_url)
 
 
 def get_secret(name):
@@ -97,11 +97,11 @@ def get_secret(name):
         return True
 
 
-def vault_unseal(key, vault_instance_url):
+def openbao_unseal(key, openbao_instance_url):
     payload = {"key": key}
     try:
         requests.put(
-            f"{vault_instance_url}/v1/sys/unseal",
+            f"{openbao_instance_url}/v1/sys/unseal",
             data=json.dumps(payload),
             verify=False,  # nosec
         )
@@ -110,37 +110,37 @@ def vault_unseal(key, vault_instance_url):
     if key is None:
         logger.info("Unseal key not found")
     else:
-        logger.info("{} has been provided an unseal key", vault_instance_url)
+        logger.info("{} has been provided an unseal key", openbao_instance_url)
 
 
-def get_seal_status(vault_instance_url, vault_status):
+def get_seal_status(openbao_instance_url, openbao_status):
     try:
         get_seal = requests.get(
-            f"{vault_instance_url}/v1/sys/seal-status", verify=False  # nosec
+            f"{openbao_instance_url}/v1/sys/seal-status", verify=False  # nosec
         )
         if not get_seal.json()["initialized"]:
-            if vault_status:
+            if openbao_status:
                 logger.info(
-                    "Vault has already been initialized, establishing quorum instead"
+                    "OpenBao has already been initialized, establishing quorum instead"
                 )
                 return status_init  # Return status_init to establish quorum
 
-            logger.info("Going to init and unseal Vault")
+            logger.info("Going to init and unseal OpenBao")
             try:
-                delete_secret([root_token, vault_keys])
+                delete_secret([root_token, openbao_keys])
             except kubernetes.client.exceptions.ApiException as delete_secret_error:
                 logger.error(
                     "During  initialize got a error -> {}", delete_secret_error
                 )
-            create_secrets(init_vault(vault_instance_url))
+            create_secrets(init_openbao(openbao_instance_url))
 
-            logger.info("Unsealing Vault node {}", replica_url)
-            read_secret(vault_keys, vault_instance_url)
+            logger.info("Unsealing OpenBao node {}", replica_url)
+            read_secret(openbao_keys, openbao_instance_url)
 
             return status_init
         if get_seal.json()["sealed"]:
-            logger.info("Unsealing Vault node {}", replica_url)
-            read_secret(vault_keys, vault_instance_url)
+            logger.info("Unsealing OpenBao node {}", replica_url)
+            read_secret(openbao_keys, openbao_instance_url)
 
             return status_unseal
     except requests.exceptions.ConnectionError as seal_status_error:
@@ -161,30 +161,30 @@ def delete_secret(secret_name):
 def get_quorum_established(quorum_established, replica_list, main_url):
     while not quorum_established:
         quorum_established = True
-        for vault_instance_url in replica_list:
-            if vault_instance_url == main_url:
+        for openbao_instance_url in replica_list:
+            if openbao_instance_url == main_url:
                 continue
 
             leader_status = requests.get(
-                f"{vault_instance_url}/v1/sys/leader", verify=False  # nosec
+                f"{openbao_instance_url}/v1/sys/leader", verify=False  # nosec
             )
 
             if "leader_address" not in leader_status.json():
                 quorum_established = False
                 logger.info(
-                    "Vault node {} is not ready: {} ", replica_url, leader_status.json()
+                    "OpenBao node {} is not ready: {} ", replica_url, leader_status.json()
                 )
                 continue
             if leader_status.json()["leader_address"] == main_url:
                 logger.info(
-                    "Vault node {} has acknowledged {} as the leader",
-                    vault_instance_url,
+                    "OpenBao node {} has acknowledged {} as the leader",
+                    openbao_instance_url,
                     main_url,
                 )
             else:
                 logger.info(
-                    "Vault node {} has not acknowledged {} as the leader",
-                    vault_instance_url,
+                    "OpenBao node {} has not acknowledged {} as the leader",
+                    openbao_instance_url,
                     main_url,
                 )
 
@@ -202,14 +202,14 @@ def wait_for_quorum(replica_list, main_url):
         leader_status.status_code,
         leader_status.json(),
     )
-    for vault_instance_url in replica_list:
-        if vault_instance_url == main_url:
+    for openbao_instance_url in replica_list:
+        if openbao_instance_url == main_url:
             continue
         try:
-            logger.info("Joining {} to leader", vault_instance_url)
+            logger.info("Joining {} to leader", openbao_instance_url)
 
             requests.post(
-                f"{vault_instance_url}/v1/sys/storage/raft/join",
+                f"{openbao_instance_url}/v1/sys/storage/raft/join",
                 data=json.dumps(payload),
                 verify=False,  # nosec
             )
@@ -219,7 +219,7 @@ def wait_for_quorum(replica_list, main_url):
             return status_error
 
         logger.info("Unsealing {}", replica_url)
-        read_secret(vault_keys, vault_instance_url)
+        read_secret(openbao_keys, openbao_instance_url)
 
     quorum_established = False
 
@@ -232,7 +232,7 @@ def wait_for_quorum(replica_list, main_url):
     logger.info("Quorum has been established with {} as the leader", main_url)
 
 
-def get_vault_pods():
+def get_openbao_pods():
     if pod_retrieval_max_retries <= 0:
         logger.error("Pod retrieval max retries cannot be lower than 1: {}", pod_retrieval_max_retries)
         exit(2)
@@ -241,49 +241,49 @@ def get_vault_pods():
     while tries < pod_retrieval_max_retries:
         tries = tries + 1
         pod_list = api_instance.list_namespaced_pod(
-            namespace=vault_namespace, label_selector=vault_label_selector
+            namespace=openbao_namespace, label_selector=openbao_label_selector
         )
 
         if len(pod_list.items) == 0:
-            logger.error("Not Vault pods found. Please make sure they are annotated with: {}", vault_label_selector)
+            logger.error("Not OpenBao pods found. Please make sure they are annotated with: {}", openbao_label_selector)
             exit(2)
 
-        vault_pods_with_no_ip = [pod.metadata.name for pod in pod_list.items if pod.status.pod_ip is None]
+        openbao_pods_with_no_ip = [pod.metadata.name for pod in pod_list.items if pod.status.pod_ip is None]
 
-        if len(vault_pods_with_no_ip) > 0:
-            logger.warning("Vault pods have no assigned IP address: {}", vault_pods_with_no_ip)
+        if len(openbao_pods_with_no_ip) > 0:
+            logger.warning("OpenBao pods have no assigned IP address: {}", openbao_pods_with_no_ip)
             sleep(scan_delay)
             continue
 
         return pod_list
 
-    logger.error("Waiting for Vault pods to be ready timed out. Will exit.")
+    logger.error("Waiting for OpenBao pods to be ready timed out. Will exit.")
     exit(2)
 
 
 if __name__ == "__main__":
 
-    vault_initialized = False
+    openbao_initialized = False
     leader_url = ""
     secret_shares = ""  # nosec
     secret_threshold = ""  # nosec
     namespace = ""
     root_token = ""  # nosec
-    vault_keys = ""  # nosec
+    openbao_keys = ""  # nosec
     scan_delay = ""
-    vault_url = ""
+    openbao_url = ""
     pod_retrieval_max_retries = ""
     try:
-        vault_url = os.environ["VAULT_URL"]
-        secret_shares = os.environ["VAULT_SECRET_SHARES"]
-        secret_threshold = os.environ["VAULT_SECRET_THRESHOLD"]
+        openbao_url = os.environ["OPENBAO_URL"]
+        secret_shares = os.environ["OPENBAO_SECRET_SHARES"]
+        secret_threshold = os.environ["OPENBAO_SECRET_THRESHOLD"]
         namespace = os.environ["NAMESPACE"]
-        root_token = os.environ["VAULT_ROOT_TOKEN_SECRET"]
-        vault_keys = os.environ["VAULT_KEYS_SECRET"]
-        scan_delay = int(os.environ["VAULT_SCAN_DELAY"])
-        pod_retrieval_max_retries = int(os.environ.get("VAULT_POD_RETRIEVAL_MAX_RETRIES", 5))
-        vault_label_selector = os.environ.get("VAULT_LABEL_SELECTOR", "vault-sealed=true")
-        if not vault_url:
+        root_token = os.environ["OPENBAO_ROOT_TOKEN_SECRET"]
+        openbao_keys = os.environ["OPENBAO_KEYS_SECRET"]
+        scan_delay = int(os.environ["OPENBAO_SCAN_DELAY"])
+        pod_retrieval_max_retries = int(os.environ.get("OPENBAO_POD_RETRIEVAL_MAX_RETRIES", 5))
+        openbao_label_selector = os.environ.get("OPENBAO_LABEL_SELECTOR", "openbao-sealed=true")
+        if not openbao_url:
             raise KeyError
     except KeyError as error:
         if not secret_shares:
@@ -292,8 +292,8 @@ if __name__ == "__main__":
             namespace = "default"
         if not root_token:
             root_token = "root-token"  # nosec
-        if not vault_keys:
-            vault_keys = "vault-keys"
+        if not openbao_keys:
+            openbao_keys = "openbao-keys"
         if not secret_threshold:
             secret_threshold = 5
         if not scan_delay:
@@ -303,7 +303,7 @@ if __name__ == "__main__":
             exit(2)
     logger.remove()
     logger.add(sys.stderr, format=tracing_formatter)
-    logger.info("Start Vault auto unseal")
+    logger.info("Start OpenBao auto unseal")
     k8s_client = get_kubernetes_client()
     api_instance = k8s_client.CoreV1Api()
     k8s_secret = k8s_client.V1Secret()
@@ -316,15 +316,15 @@ if __name__ == "__main__":
         "secret_threshold": int(secret_threshold),
     }
 
-    url = urlparse(vault_url)
-    vault_hostname = url.hostname
-    vault_port = url.port
-    vault_namespace = url.hostname.split(".")[1]
-    logger.info("Vault Hostname: {} Vault Port: {}", vault_hostname, vault_port)
+    url = urlparse(openbao_url)
+    openbao_hostname = url.hostname
+    openbao_port = url.port
+    openbao_namespace = url.hostname.split(".")[1]
+    logger.info("OpenBao Hostname: {} OpenBao Port: {}", openbao_hostname, openbao_port)
 
     while True:
         logger.info("Begin scan cycle")
-        # When running multiple vault instances, the DNS query will return multiple IPs.
+        # When running multiple openbao instances, the DNS query will return multiple IPs.
         # We want to iterate over each of those IPs to ensure each replica is unsealed.
 
         # getaddrinfo() returns a 5-touple of (family, type, proto, canonname, sockaddr)
@@ -335,11 +335,11 @@ if __name__ == "__main__":
         # Then use list comprehension to return a list of "http://{ip_addr}:{port}" to
         # iterate over
         try:
-            vault_replicas = sorted(
+            openbao_replicas = sorted(
                 [
                     f"{url.scheme}://{x[4][0]}:{x[4][1]}"
                     for x in socket.getaddrinfo(
-                    vault_hostname, vault_port, proto=socket.IPPROTO_TCP
+                    openbao_hostname, openbao_port, proto=socket.IPPROTO_TCP
                 )
                 ]
             )
@@ -347,33 +347,33 @@ if __name__ == "__main__":
             logger.error("Failed to lookup DNS info: {}", err)
             sleep(5)
             continue
-        vault_replicas.clear()
+        openbao_replicas.clear()
 
-        pods = get_vault_pods()
+        pods = get_openbao_pods()
         for pod in pods.items:
-            vault_replicas.append(f"{url.scheme}://{pod.status.pod_ip}:{vault_port}")
-        logger.info("Discovered Vault instance(s): {}", vault_replicas)
-        for replica_url in vault_replicas:
-            status = get_seal_status(replica_url, vault_initialized)
+            openbao_replicas.append(f"{url.scheme}://{pod.status.pod_ip}:{openbao_port}")
+        logger.info("Discovered OpenBao instance(s): {}", openbao_replicas)
+        for replica_url in openbao_replicas:
+            status = get_seal_status(replica_url, openbao_initialized)
             if status == status_init:
-                if len(vault_replicas) > 1:
+                if len(openbao_replicas) > 1:
                     logger.info(
-                        "Vault running in High Availability mode will unseal Vault nodes one by one"
+                        "OpenBao running in High Availability mode will unseal OpenBao nodes one by one"
                     )
                 else:
-                    logger.info("Vault running in Singe Node mode will unseal")
+                    logger.info("OpenBao running in Singe Node mode will unseal")
                 # Only set the Leader URL once
-                if not vault_initialized:
-                    vault_initialized = True
+                if not openbao_initialized:
+                    openbao_initialized = True
                     leader_url = replica_url
                 logger.info(
-                    "Vault was just initialized, waiting for quorum to be established"
+                    "OpenBao was just initialized, waiting for quorum to be established"
                 )
-                wait_for_quorum(vault_replicas, leader_url)
+                wait_for_quorum(openbao_replicas, leader_url)
 
             if status == status_unseal:
-                # If we've unsealed an instance, then by definition vault has been initialized
-                vault_initialized = True
-                logger.info("Vault has been unsealed")
+                # If we've unsealed an instance, then by definition openbao has been initialized
+                openbao_initialized = True
+                logger.info("OpenBao has been unsealed")
 
         sleep(scan_delay)

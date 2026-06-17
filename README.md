@@ -1,11 +1,13 @@
 # openbao_autounseal
 
 > **Fork notes (VizzleTF).** Fork of [pyToshka/vault-autounseal](https://github.com/pyToshka/vault-autounseal),
-> adapted for [OpenBao](https://openbao.org) HA on Kubernetes.
+> rebranded to **openbao-autounseal** for [OpenBao](https://openbao.org) HA on
+> Kubernetes (project name, image, Helm chart and env-var prefix all changed
+> `VAULT_*` → `OPENBAO_*`).
 >
 > **Why this fork exists.** After a full reboot of all control-plane nodes, an
 > OpenBao HA StatefulSet (`podManagementPolicy: OrderedReady`, Shamir seal) came
-> up sealed and the upstream-released image (`opennix/vault-autounseal:vault-autounseal-0.5.2`)
+> up sealed and the only upstream-released image (`opennix/vault-autounseal:vault-autounseal-0.5.2`)
 > never discovered it — `Discovered Vault instance(s): []` forever — leaving the
 > whole cluster's ExternalSecrets down. Two bugs in that released image:
 > 1. the pod label selector was hardcoded to `vault-sealed=true`, but the OpenBao
@@ -13,16 +15,17 @@
 > 2. the pod list was fetched **once** before the scan loop, so a pod that
 >    appeared later (or had no IP yet) was never seen.
 >
-> Both are already fixed on upstream `main` (configurable `VAULT_LABEL_SELECTOR`,
-> env-driven; `get_vault_pods()` called every cycle — PR #41), but upstream only
-> published those fixes via floating `latest`/`main` tags, never a pinnable
-> release image past `0.5.2`.
+> Both bugs are already fixed on upstream `main` (label selector made
+> env-configurable; pod list re-fetched every scan cycle — upstream PR #41), but
+> upstream only shipped those fixes via floating `latest`/`main` tags, never a
+> pinnable release image past `0.5.2`.
 >
-> **What this fork does.** No application-code change is needed — `main` already
-> carries the fix. The fork only re-points CI to publish a **pinnable, multi-arch
-> image to GitHub Container Registry**: `ghcr.io/vizzletf/openbao-autounseal`
-> (built via the built-in `GITHUB_TOKEN`, no DockerHub secrets). Consume it with
-> `VAULT_LABEL_SELECTOR=app.kubernetes.io/instance=openbao,component=server`.
+> **What this fork does.** Beyond the rebrand, no upstream *logic* change was
+> needed — `main` already carries the fix. The fork re-points CI to publish a
+> **pinnable, multi-arch image to GitHub Container Registry**:
+> `ghcr.io/vizzletf/openbao-autounseal`, and renames the config env prefix to
+> `OPENBAO_*`. Consume it with
+> `OPENBAO_LABEL_SELECTOR=app.kubernetes.io/instance=openbao,component=server`.
 
 ## Disclaimer
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
@@ -38,11 +41,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## What for
 
-As you know, Vault provides several mechanisms for auto unsealing. However, sometimes I couldn't use AWS or GCP as the cloud provider. The main idea was to use Kubernetes secrets as the source for auto unsealing.
+As you know, OpenBao provides several mechanisms for auto unsealing. However, sometimes I couldn't use AWS or GCP as the cloud provider. The main idea was to use Kubernetes secrets as the source for auto unsealing.
 
 ## Tested on
 
-| Engine     | Version       | Vault mode |
+| Engine     | Version       | OpenBao mode |
 |------------|---------------|------------|
 | kind       | v1.29.1       | single/ha  |
 | crc        | 2.32.0+54a6f9 | single     |
@@ -69,12 +72,12 @@ Run script `python app.py`
 
 | Name                    | Description                                                                                                                                     |
 |-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| VAULT_URL               | Vault server url with port e.g http://127.0.0.1:8200                                                                                            |
-| VAULT_SECRET_SHARES     | Specifies the number of shares that should be encrypted by the HSM and stored for auto-unsealing. Currently must be the same as `secret_shares` |
-| VAULT_SECRET_THRESHOLD  | Specifies the number of shares required to reconstruct the recovery key. This must be less than or equal to `recovery_shares`.                  |
-| NAMESPACE               | Kubernetes namespace for storing vault root key and keys                                                                                        |
-| VAULT_ROOT_TOKEN_SECRET | Kubernetes secret name for root token                                                                                                           |
-| VAULT_KEYS_SECRET       | Kubernetes secret name for vault key                                                                                                            |
+| OPENBAO_URL               | OpenBao server url with port e.g http://127.0.0.1:8200                                                                                            |
+| OPENBAO_SECRET_SHARES     | Specifies the number of shares that should be encrypted by the HSM and stored for auto-unsealing. Currently must be the same as `secret_shares` |
+| OPENBAO_SECRET_THRESHOLD  | Specifies the number of shares required to reconstruct the recovery key. This must be less than or equal to `recovery_shares`.                  |
+| NAMESPACE               | Kubernetes namespace for storing openbao root key and keys                                                                                        |
+| OPENBAO_ROOT_TOKEN_SECRET | Kubernetes secret name for root token                                                                                                           |
+| OPENBAO_KEYS_SECRET       | Kubernetes secret name for openbao key                                                                                                            |
 
 ## Deployment
 
@@ -83,7 +86,7 @@ The solution can be run as docker container or inside Kubernetes
 Building docker container
 
 ```shell
-docker build . -t vault-autounseal:latest
+docker build . -t openbao-autounseal:latest
 
 ```
 or build multiarch docker image:
@@ -95,7 +98,7 @@ make docker
 or You can pull existing image from DockerHub
 
 ```shell
-docker pull opennix/vault-autounseal
+docker pull ghcr.io/vizzletf/openbao-autounseal
 ```
 
 ### Using helm chart
@@ -105,18 +108,18 @@ Helm's [documentation](https://helm.sh/docs) to get started.
 
 Once Helm has been set up correctly, add the repo as follows:
 
-  helm repo add vault-autounseal https://pytoshka.github.io/vault-autounseal
+  helm repo add openbao-autounseal https://pytoshka.github.io/openbao-autounseal
 
 If you had already added this repo earlier, run `helm repo update` to retrieve
 the latest versions of the packages.  You can then run `helm search repo
-vault-autounseal` to see the charts.
+openbao-autounseal` to see the charts.
 
-To install the vault-autounseal chart:
+To install the openbao-autounseal chart:
 
-    helm install vault-autounseal vault-autounseal/vault-autounseal --set=settings.vault_url=http://vault.vault:8200
+    helm install openbao-autounseal openbao-autounseal/openbao-autounseal --set=settings.openbao_url=http://openbao.openbao:8200
 
 To uninstall the chart:
 
-    helm delete vault-autounseal
+    helm delete openbao-autounseal
 
 <a href="https://www.buymeacoffee.com/pyToshka" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>

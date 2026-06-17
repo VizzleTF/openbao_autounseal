@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "openbao-autounseal.fullname" . }}
+  labels:
+    {{- include "openbao-autounseal.labels" . | nindent 4 }}
+data:
+  OPENBAO_URL: {{ required "Value for .settings.openbao_url is required and should point to your openbao endpoint" .Values.settings.openbao_url}}
+  OPENBAO_SECRET_SHARES: 	{{ .Values.settings.openbao_secret_shares | quote }}
+  OPENBAO_SECRET_THRESHOLD: {{ .Values.settings.openbao_secret_threshold | quote }}
+  NAMESPACE: {{ .Release.Namespace }}
+  OPENBAO_ROOT_TOKEN_SECRET: {{ .Values.settings.openbao_root_token_secret }}
+  OPENBAO_KEYS_SECRET: {{ .Values.settings.openbao_keys_secret }}
+  LOGURU_LEVEL: {{ .Values.settings.log_level | default "INFO" }}
+  OPENBAO_SCAN_DELAY: {{ .Values.settings.scan_delay | quote }}
+  OPENBAO_LABEL_SELECTOR: {{ .Values.settings.openbao_label_selector }}

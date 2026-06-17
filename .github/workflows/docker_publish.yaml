@@ -2,14 +2,14 @@ name: Docker
 
 # Fork build: publishes to GitHub Container Registry (ghcr.io) using the
 # built-in GITHUB_TOKEN — no DockerHub secrets needed. Upstream image lacked a
-# released build with the loop-refresh + configurable VAULT_LABEL_SELECTOR fix
+# released build with the loop-refresh + configurable OPENBAO_LABEL_SELECTOR fix
 # (only floating latest/main carried it); this fork publishes a pinnable image.
 
 on:
   workflow_dispatch:
   push:
     branches: [ "*" ]
-    tags: [ 'vault-autounseal-*.*.*' ]
+    tags: [ 'openbao-autounseal-*.*.*' ]
   pull_request:
     branches: [ "main" ]
 
@@ -52,7 +52,8 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=pr
-            type=semver,pattern={{version}},prefix=vault-autounseal-
+            type=ref,event=tag
+            type=match,pattern=openbao-autounseal-(.*),group=1
             type=sha,format=long
 
       - name: Build and push Docker image

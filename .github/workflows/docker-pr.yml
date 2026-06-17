@@ -9,4 +9,4 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag vault-autounseal:$(date +%s)
+      run: docker build . --file Dockerfile --tag openbao-autounseal:$(date +%s)

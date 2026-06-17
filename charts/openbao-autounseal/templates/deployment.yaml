@@ -1,14 +1,14 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "vault-autounseal.fullname" . }}
+  name: {{ include "openbao-autounseal.fullname" . }}
   labels:
-    {{- include "vault-autounseal.labels" . | nindent 4 }}
+    {{- include "openbao-autounseal.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "vault-autounseal.selectorLabels" . | nindent 6 }}
+      {{- include "openbao-autounseal.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -17,13 +17,13 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "vault-autounseal.selectorLabels" . | nindent 8 }}
+        {{- include "openbao-autounseal.selectorLabels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "vault-autounseal.serviceAccountName" . }}
+      serviceAccountName: {{ include "openbao-autounseal.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
@@ -34,7 +34,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           envFrom:
           - configMapRef:
-              name: {{ include "vault-autounseal.fullname" . }}
+              name: {{ include "openbao-autounseal.fullname" . }}
               optional: false
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
