@@ -22,10 +22,30 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # scan loop hangs silently — the pod stays Ready but never unseals anything.
 REQUEST_TIMEOUT = (5, 30)
 
+
+def resolve_tls_verify():
+    """TLS verification target passed to every OpenBao request.
+
+    Instances are reached over pod IPs whose serving certs won't match, so the
+    default keeps the historical behaviour of skipping verification. Operators
+    pointing at proper hostnames can harden it:
+      - OPENBAO_CA_CERT=/path/ca.pem  -> validate against that CA bundle
+      - OPENBAO_TLS_SKIP_VERIFY=false -> validate against the system trust store
+    """
+    ca_cert = os.environ.get("OPENBAO_CA_CERT")
+    if ca_cert:
+        return ca_cert
+    skip = os.environ.get("OPENBAO_TLS_SKIP_VERIFY", "true").lower() in ("1", "true", "yes")
+    return not skip
+
+
+# Resolved once at startup; referenced by every requests.* call below.
+TLS_VERIFY = resolve_tls_verify()
+
 # Touched at the start of every scan cycle; the liveness probe restarts the pod
 # if this file goes stale. Lives in an emptyDir mount so the root fs stays
 # read-only. Overridable for local runs.
-HEARTBEAT_FILE = os.environ.get("HEARTBEAT_FILE", "/tmp/heartbeat")
+HEARTBEAT_FILE = os.environ.get("HEARTBEAT_FILE", "/tmp/heartbeat")  # NOSONAR: /tmp is a private per-pod emptyDir, not a shared world-writable dir
 
 
 def get_kubernetes_client():
@@ -63,7 +83,7 @@ def init_openbao(openbao_instance_url):
         init_openbao_request = requests.put(
             f"{openbao_instance_url}/v1/sys/init",
             data=json.dumps(auto_unseal_payload),
-            verify=False,  # nosec
+            verify=TLS_VERIFY,
             timeout=REQUEST_TIMEOUT,
         )
         response = init_openbao_request.json()
@@ -108,7 +128,7 @@ def openbao_unseal(key, openbao_instance_url):
         requests.put(
             f"{openbao_instance_url}/v1/sys/unseal",
             data=json.dumps(payload),
-            verify=False,  # nosec
+            verify=TLS_VERIFY,
             timeout=REQUEST_TIMEOUT,
         )
         logger.info("{} has been provided an unseal key", openbao_instance_url)
@@ -120,7 +140,7 @@ def get_seal_status(openbao_instance_url, openbao_status):
     try:
         get_seal = requests.get(
             f"{openbao_instance_url}/v1/sys/seal-status",
-            verify=False,  # nosec
+            verify=TLS_VERIFY,
             timeout=REQUEST_TIMEOUT,
         )
         if not get_seal.json()["initialized"]:
@@ -183,7 +203,7 @@ def get_quorum_established(quorum_established, replica_list, main_url):
 
             leader_status = requests.get(
                 f"{openbao_instance_url}/v1/sys/leader",
-                verify=False,  # nosec
+                verify=TLS_VERIFY,
                 timeout=REQUEST_TIMEOUT,
             )
 
@@ -218,7 +238,7 @@ def get_quorum_established(quorum_established, replica_list, main_url):
 def wait_for_quorum(replica_list, main_url):
     payload = {"leader_api_addr": main_url}
     leader_status = requests.get(
-        f"{main_url}/v1/sys/leader", verify=False, timeout=REQUEST_TIMEOUT  # nosec
+        f"{main_url}/v1/sys/leader", verify=TLS_VERIFY, timeout=REQUEST_TIMEOUT
     )
     logger.info(
         "Leader http code {}, response json {}",
@@ -234,7 +254,7 @@ def wait_for_quorum(replica_list, main_url):
             requests.post(
                 f"{openbao_instance_url}/v1/sys/storage/raft/join",
                 data=json.dumps(payload),
-                verify=False,  # nosec
+                verify=TLS_VERIFY,
                 timeout=REQUEST_TIMEOUT,
             )
 

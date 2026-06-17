@@ -23,11 +23,15 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "openbao-autounseal.serviceAccountName" . }}
+      # Token is required: the controller calls the Kubernetes API (in-cluster
+      # config) and is bound to a least-privilege Role in rbac.yaml.
+      serviceAccountName: {{ include "openbao-autounseal.serviceAccountName" . }}  # NOSONAR
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ .Chart.Name }}
+        # CPU/memory/ephemeral-storage limits are set via .Values.resources
+        # (see values.yaml); Sonar cannot resolve the templated toYaml block.
+        - name: {{ .Chart.Name }}  # NOSONAR
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"

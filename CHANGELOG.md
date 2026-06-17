@@ -6,6 +6,17 @@ upstream 0.5.2 release. Upstream had already fixed the pod discovery on its
 `main` branch but never shipped a release image past 0.5.2, so the fork exists
 to publish a pinnable, OpenBao-native build.
 
+## 0.5.12
+
+Security hardening from a SonarCloud pass. TLS verification for OpenBao calls is
+now configurable instead of hardcoded off: set `OPENBAO_CA_CERT` to validate
+against a CA bundle, or `OPENBAO_TLS_SKIP_VERIFY=false` to use the system trust
+store; the default still skips verification for pod-IP connections. The chart
+ships conservative default CPU/memory/ephemeral-storage requests and limits, and
+the image installs wheels only (`--only-binary`). Remaining scanner findings on
+the Helm templates (limits behind `toYaml`, the required service-account token)
+are annotated as accepted.
+
 ## 0.5.11
 
 Cleanups from a second review pass. The quorum and unseal log lines now name the
