@@ -38,6 +38,27 @@ spec:
               optional: false
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            exec:
+              command:
+                - python3
+                - -c
+                - |
+                  import os, sys, time
+                  hb = os.environ.get("HEARTBEAT_FILE", "/tmp/heartbeat")
+                  fresh = os.path.exists(hb) and time.time() - os.path.getmtime(hb) < {{ .Values.livenessProbe.staleSeconds }}
+                  sys.exit(0 if fresh else 1)
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

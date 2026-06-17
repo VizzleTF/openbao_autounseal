@@ -22,6 +22,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # scan loop hangs silently — the pod stays Ready but never unseals anything.
 REQUEST_TIMEOUT = (5, 30)
 
+# Touched at the start of every scan cycle; the liveness probe restarts the pod
+# if this file goes stale. Lives in an emptyDir mount so the root fs stays
+# read-only. Overridable for local runs.
+HEARTBEAT_FILE = os.environ.get("HEARTBEAT_FILE", "/tmp/heartbeat")
+
 
 def get_kubernetes_client():
     try:
@@ -47,7 +52,8 @@ def tracing_formatter(record):
 
 
 def list_convert(lst):
-    converted_dict = {i: lst[i] for i in range(0, len(lst))}
+    # Secret string_data keys must be strings (DNS-subdomain), not ints.
+    converted_dict = {str(i): lst[i] for i in range(0, len(lst))}
     return converted_dict
 
 
@@ -96,12 +102,6 @@ def read_secret(name, openbao_instance_url):
         openbao_unseal(key.decode(), openbao_instance_url)
 
 
-def get_secret(name):
-    secret = api_instance.read_namespaced_secret(name=name, namespace=namespace).data
-    if secret:
-        return True
-
-
 def openbao_unseal(key, openbao_instance_url):
     payload = {"key": key}
     try:
@@ -111,12 +111,9 @@ def openbao_unseal(key, openbao_instance_url):
             verify=False,  # nosec
             timeout=REQUEST_TIMEOUT,
         )
-    except requests.exceptions.ConnectionError as unseal_error:
-        logger.error("During unseal got error", unseal_error)
-    if key is None:
-        logger.info("Unseal key not found")
-    else:
         logger.info("{} has been provided an unseal key", openbao_instance_url)
+    except requests.exceptions.RequestException as unseal_error:
+        logger.error("During unseal of {} got error: {}", openbao_instance_url, unseal_error)
 
 
 def get_seal_status(openbao_instance_url, openbao_status):
@@ -140,7 +137,13 @@ def get_seal_status(openbao_instance_url, openbao_status):
                 logger.error(
                     "During  initialize got a error -> {}", delete_secret_error
                 )
-            create_secrets(init_openbao(openbao_instance_url))
+            init_result = init_openbao(openbao_instance_url)
+            if init_result is None:
+                # init_openbao swallows ConnectionError and returns None; don't
+                # try to read root_token/keys out of nothing — retry next cycle.
+                logger.error("Initialization of {} failed; will retry", openbao_instance_url)
+                return status_error
+            create_secrets(init_result)
 
             logger.info("Unsealing OpenBao node {}", replica_url)
             read_secret(openbao_keys, openbao_instance_url)
@@ -167,7 +170,12 @@ def delete_secret(secret_name):
 
 
 def get_quorum_established(quorum_established, replica_list, main_url):
-    while not quorum_established:
+    # Bounded so a node that is reachable but never acknowledges the leader can't
+    # spin the controller forever.
+    tries = 0
+    max_tries = max(pod_retrieval_max_retries, 12)
+    while not quorum_established and tries < max_tries:
+        tries += 1
         quorum_established = True
         for openbao_instance_url in replica_list:
             if openbao_instance_url == main_url:
@@ -202,6 +210,9 @@ def get_quorum_established(quorum_established, replica_list, main_url):
                 break
 
         sleep(5)
+
+    if not quorum_established:
+        logger.warning("Quorum not established after {} attempts; continuing", max_tries)
 
 
 def wait_for_quorum(replica_list, main_url):
@@ -246,16 +257,13 @@ def wait_for_quorum(replica_list, main_url):
 
 
 def get_openbao_pods():
-    if pod_retrieval_max_retries <= 0:
-        logger.error("Pod retrieval max retries cannot be lower than 1: {}", pod_retrieval_max_retries)
-        exit(2)
 
     tries = 0
     pod_list = None
     while tries < pod_retrieval_max_retries:
         tries = tries + 1
         pod_list = api_instance.list_namespaced_pod(
-            namespace=openbao_namespace, label_selector=openbao_label_selector
+            namespace=namespace, label_selector=openbao_label_selector
         )
 
         if len(pod_list.items) == 0:
@@ -284,42 +292,38 @@ if __name__ == "__main__":
 
     openbao_initialized = False
     leader_url = ""
-    secret_shares = ""  # nosec
-    secret_threshold = ""  # nosec
-    namespace = ""
-    root_token = ""  # nosec
-    openbao_keys = ""  # nosec
-    scan_delay = ""
-    openbao_url = ""
-    pod_retrieval_max_retries = ""
-    try:
-        openbao_url = os.environ["OPENBAO_URL"]
-        secret_shares = os.environ["OPENBAO_SECRET_SHARES"]
-        secret_threshold = os.environ["OPENBAO_SECRET_THRESHOLD"]
-        namespace = os.environ["NAMESPACE"]
-        root_token = os.environ["OPENBAO_ROOT_TOKEN_SECRET"]
-        openbao_keys = os.environ["OPENBAO_KEYS_SECRET"]
-        scan_delay = int(os.environ["OPENBAO_SCAN_DELAY"])
-        pod_retrieval_max_retries = int(os.environ.get("OPENBAO_POD_RETRIEVAL_MAX_RETRIES", 5))
-        openbao_label_selector = os.environ.get("OPENBAO_LABEL_SELECTOR", "openbao-sealed=true")
-        if not openbao_url:
-            raise KeyError
-    except KeyError as error:
-        if not secret_shares:
-            secret_shares = 5
-        if not namespace:
-            namespace = "default"
-        if not root_token:
-            root_token = "root-token"  # nosec
-        if not openbao_keys:
-            openbao_keys = "openbao-keys"
-        if not secret_threshold:
-            secret_threshold = 5
-        if not scan_delay:
-            scan_delay = 5
-        else:
-            print("Please check system variable {}", error)
-            exit(2)
+
+    # Validate required configuration up front and fail fast with a clear
+    # message. The previous try/except fallback left some vars unset on a missing
+    # key (e.g. label selector / retry count), which then blew up later as a
+    # TypeError/NameError deep in the loop instead of a readable startup error.
+    required = [
+        "OPENBAO_URL",
+        "OPENBAO_SECRET_SHARES",
+        "OPENBAO_SECRET_THRESHOLD",
+        "NAMESPACE",
+        "OPENBAO_ROOT_TOKEN_SECRET",
+        "OPENBAO_KEYS_SECRET",
+        "OPENBAO_SCAN_DELAY",
+    ]
+    missing = [k for k in required if not os.environ.get(k)]
+    if missing:
+        print("Missing required environment variable(s): {}".format(", ".join(missing)))
+        exit(2)
+
+    openbao_url = os.environ["OPENBAO_URL"]
+    secret_shares = os.environ["OPENBAO_SECRET_SHARES"]
+    secret_threshold = os.environ["OPENBAO_SECRET_THRESHOLD"]
+    namespace = os.environ["NAMESPACE"]
+    root_token = os.environ["OPENBAO_ROOT_TOKEN_SECRET"]
+    openbao_keys = os.environ["OPENBAO_KEYS_SECRET"]
+    scan_delay = int(os.environ["OPENBAO_SCAN_DELAY"])
+    pod_retrieval_max_retries = int(os.environ.get("OPENBAO_POD_RETRIEVAL_MAX_RETRIES", 5))
+    openbao_label_selector = os.environ.get("OPENBAO_LABEL_SELECTOR", "openbao-sealed=true")
+
+    if pod_retrieval_max_retries <= 0:
+        print("OPENBAO_POD_RETRIEVAL_MAX_RETRIES must be >= 1, got {}".format(pod_retrieval_max_retries))
+        exit(2)
     logger.remove()
     logger.add(sys.stderr, format=tracing_formatter)
     logger.info("Start OpenBao auto unseal")
@@ -338,11 +342,20 @@ if __name__ == "__main__":
     url = urlparse(openbao_url)
     openbao_hostname = url.hostname
     openbao_port = url.port
-    openbao_namespace = url.hostname.split(".")[1]
+    # Pod discovery uses the NAMESPACE env (same namespace as the secrets), not a
+    # fragile split of the URL host — a bare service name or an external host
+    # would otherwise crash or point at the wrong namespace.
     logger.info("OpenBao Hostname: {} OpenBao Port: {}", openbao_hostname, openbao_port)
 
     while True:
         logger.info("Begin scan cycle")
+        # Heartbeat for the liveness probe: a stale mtime means the loop wedged
+        # (e.g. a hung dependency) and the pod should be restarted.
+        try:
+            with open(HEARTBEAT_FILE, "w") as hb:
+                hb.write("ok")
+        except OSError as hb_err:
+            logger.warning("Could not write heartbeat file: {}", hb_err)
         # Discover the current OpenBao pods (by label selector) on every cycle, so
         # a deleted/rescheduled pod with a new IP is picked up. A failed HTTP call
         # or k8s API error is logged and retried next cycle instead of killing the

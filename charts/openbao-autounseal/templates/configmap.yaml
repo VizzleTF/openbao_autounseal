@@ -6,7 +6,7 @@ metadata:
     {{- include "openbao-autounseal.labels" . | nindent 4 }}
 data:
   OPENBAO_URL: {{ required "Value for .settings.openbao_url is required and should point to your openbao endpoint" .Values.settings.openbao_url}}
-  OPENBAO_SECRET_SHARES: 	{{ .Values.settings.openbao_secret_shares | quote }}
+  OPENBAO_SECRET_SHARES: {{ .Values.settings.openbao_secret_shares | quote }}
   OPENBAO_SECRET_THRESHOLD: {{ .Values.settings.openbao_secret_threshold | quote }}
   NAMESPACE: {{ .Release.Namespace }}
   OPENBAO_ROOT_TOKEN_SECRET: {{ .Values.settings.openbao_root_token_secret }}

@@ -59,6 +59,16 @@ resources: {}
   #   cpu: 100m
   #   memory: 128Mi
 
+# Liveness: the app touches /tmp/heartbeat each scan cycle; the probe restarts
+# the pod if that file goes stale (loop wedged). staleSeconds must comfortably
+# exceed settings.scan_delay.
+livenessProbe:
+  enabled: true
+  staleSeconds: 90
+  initialDelaySeconds: 15
+  periodSeconds: 30
+  failureThreshold: 3
+
 nodeSelector: {}
 
 tolerations: []
