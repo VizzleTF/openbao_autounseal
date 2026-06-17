@@ -6,6 +6,13 @@ upstream 0.5.2 release. Upstream had already fixed the pod discovery on its
 `main` branch but never shipped a release image past 0.5.2, so the fork exists
 to publish a pinnable, OpenBao-native build.
 
+## 0.5.14
+
+The entrypoint is split into `configure()`, `scan_cycle()` and `main()` (no
+behaviour change — the startup validation and scan loop run exactly as before),
+which makes the controller fully unit-testable. The pytest suite now covers
+every function and branch, taking line coverage to 100%.
+
 ## 0.5.13
 
 Clears the remaining SonarCloud security hotspots. GitHub Actions are pinned to

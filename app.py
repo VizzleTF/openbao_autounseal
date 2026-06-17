@@ -308,15 +308,21 @@ def get_openbao_pods():
     return pod_list
 
 
-if __name__ == "__main__":
+def configure():
+    """Validate required configuration, set up logging and the module-level
+    state the scan loop and HTTP helpers rely on.
 
-    openbao_initialized = False
-    leader_url = ""
+    Fails fast with a clear message and a non-zero exit if a required env var is
+    missing or the retry count is invalid — the previous try/except fallback left
+    some vars unset on a missing key, which then blew up later as a
+    TypeError/NameError deep in the loop instead of a readable startup error.
+    """
+    global namespace, root_token, openbao_keys, scan_delay
+    global pod_retrieval_max_retries, openbao_label_selector
+    global api_instance, k8s_secret
+    global status_init, status_unseal, status_ok, status_error
+    global auto_unseal_payload, url, openbao_port
 
-    # Validate required configuration up front and fail fast with a clear
-    # message. The previous try/except fallback left some vars unset on a missing
-    # key (e.g. label selector / retry count), which then blew up later as a
-    # TypeError/NameError deep in the loop instead of a readable startup error.
     required = [
         "OPENBAO_URL",
         "OPENBAO_SECRET_SHARES",
@@ -359,60 +365,76 @@ if __name__ == "__main__":
         "secret_threshold": int(secret_threshold),
     }
 
-    url = urlparse(openbao_url)
-    openbao_hostname = url.hostname
-    openbao_port = url.port
     # Pod discovery uses the NAMESPACE env (same namespace as the secrets), not a
     # fragile split of the URL host — a bare service name or an external host
     # would otherwise crash or point at the wrong namespace.
-    logger.info("OpenBao Hostname: {} OpenBao Port: {}", openbao_hostname, openbao_port)
+    url = urlparse(openbao_url)
+    openbao_port = url.port
+    logger.info("OpenBao Hostname: {} OpenBao Port: {}", url.hostname, openbao_port)
 
-    while True:
-        logger.info("Begin scan cycle")
-        # Heartbeat for the liveness probe: a stale mtime means the loop wedged
-        # (e.g. a hung dependency) and the pod should be restarted.
-        try:
-            with open(HEARTBEAT_FILE, "w") as hb:
-                hb.write("ok")
-        except OSError as hb_err:
-            logger.warning("Could not write heartbeat file: {}", hb_err)
-        # Discover the current OpenBao pods (by label selector) on every cycle, so
-        # a deleted/rescheduled pod with a new IP is picked up. A failed HTTP call
-        # or k8s API error is logged and retried next cycle instead of killing the
-        # process — a discovered pod that disappears must not wedge the loop.
-        try:
-            pods = get_openbao_pods()
-            openbao_replicas = sorted(
-                f"{url.scheme}://{pod.status.pod_ip}:{openbao_port}"
-                for pod in pods.items
-                if pod.status.pod_ip
-            )
-            logger.info("Discovered OpenBao instance(s): {}", openbao_replicas)
-            for replica_url in openbao_replicas:
-                status = get_seal_status(replica_url, openbao_initialized)
-                if status == status_init:
-                    if len(openbao_replicas) > 1:
-                        logger.info(
-                            "OpenBao running in High Availability mode will unseal OpenBao nodes one by one"
-                        )
-                    else:
-                        logger.info("OpenBao running in Single Node mode will unseal")
-                    # Only set the Leader URL once
-                    if not openbao_initialized:
-                        openbao_initialized = True
-                        leader_url = replica_url
+
+def scan_cycle(openbao_initialized, leader_url):
+    """Run one discovery/unseal pass and return the updated
+    (openbao_initialized, leader_url) state for the next cycle.
+
+    Pods are re-discovered (by label selector) every cycle so a deleted or
+    rescheduled pod with a new IP is picked up. A failed HTTP call or k8s API
+    error is logged and retried next cycle instead of killing the process — a
+    discovered pod that disappears must not wedge the loop.
+    """
+    logger.info("Begin scan cycle")
+    # Heartbeat for the liveness probe: a stale mtime means the loop wedged
+    # (e.g. a hung dependency) and the pod should be restarted.
+    try:
+        with open(HEARTBEAT_FILE, "w") as hb:
+            hb.write("ok")
+    except OSError as hb_err:
+        logger.warning("Could not write heartbeat file: {}", hb_err)
+    try:
+        pods = get_openbao_pods()
+        openbao_replicas = sorted(
+            f"{url.scheme}://{pod.status.pod_ip}:{openbao_port}"
+            for pod in pods.items
+            if pod.status.pod_ip
+        )
+        logger.info("Discovered OpenBao instance(s): {}", openbao_replicas)
+        for replica_url in openbao_replicas:
+            status = get_seal_status(replica_url, openbao_initialized)
+            if status == status_init:
+                if len(openbao_replicas) > 1:
                     logger.info(
-                        "OpenBao was just initialized, waiting for quorum to be established"
+                        "OpenBao running in High Availability mode will unseal OpenBao nodes one by one"
                     )
-                    wait_for_quorum(openbao_replicas, leader_url)
-
-                if status == status_unseal:
-                    # If we've unsealed an instance, then by definition openbao has been initialized
+                else:
+                    logger.info("OpenBao running in Single Node mode will unseal")
+                # Only set the Leader URL once
+                if not openbao_initialized:
                     openbao_initialized = True
-                    logger.info("OpenBao has been unsealed")
-        except requests.exceptions.RequestException as err:
-            logger.warning("OpenBao request failed this cycle, retrying next scan: {}", err)
-        except kubernetes.client.exceptions.ApiException as err:
-            logger.warning("Kubernetes API error this cycle, retrying next scan: {}", err)
+                    leader_url = replica_url
+                logger.info(
+                    "OpenBao was just initialized, waiting for quorum to be established"
+                )
+                wait_for_quorum(openbao_replicas, leader_url)
 
+            if status == status_unseal:
+                # If we've unsealed an instance, then by definition openbao has been initialized
+                openbao_initialized = True
+                logger.info("OpenBao has been unsealed")
+    except requests.exceptions.RequestException as err:
+        logger.warning("OpenBao request failed this cycle, retrying next scan: {}", err)
+    except kubernetes.client.exceptions.ApiException as err:
+        logger.warning("Kubernetes API error this cycle, retrying next scan: {}", err)
+    return openbao_initialized, leader_url
+
+
+def main():
+    configure()
+    openbao_initialized = False
+    leader_url = ""
+    while True:
+        openbao_initialized, leader_url = scan_cycle(openbao_initialized, leader_url)
         sleep(scan_delay)
+
+
+if __name__ == "__main__":
+    main()  # pragma: no cover
