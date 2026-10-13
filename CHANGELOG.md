@@ -6,6 +6,17 @@ upstream 0.5.2 release. Upstream had already fixed the pod discovery on its
 `main` branch but never shipped a release image past 0.5.2, so the fork exists
 to publish a pinnable, OpenBao-native build.
 
+## 0.5.16
+
+Chart and release-process changes only; the image stays at 0.5.15. The chart
+gets a README, a `values.schema.json` that rejects unknown top-level keys, and
+full `Chart.yaml` metadata. The config checksum on the pod template now hashes
+only the ConfigMap data, so a chart-only bump no longer restarts the pod (this
+release still restarts it once, because the checksum input changes). The new
+`Release` workflow builds the image for `appVersion` before it publishes the
+chart, and the `openbao-autounseal-*` tag trigger is gone from the Docker
+workflow, since tags created by chart-releaser never started it.
+
 ## 0.5.15
 
 Fixes a CrashLoopBackOff from a flaky liveness probe. The probe execs a full

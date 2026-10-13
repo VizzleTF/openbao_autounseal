@@ -4,12 +4,13 @@ name: Docker
 # built-in GITHUB_TOKEN — no DockerHub secrets needed. Upstream image lacked a
 # released build with the loop-refresh + configurable OPENBAO_LABEL_SELECTOR fix
 # (only floating latest/main carried it); this fork publishes a pinnable image.
+# Version tags (:<appVersion>, :latest) come only from release.yaml; this
+# workflow builds branch, PR and sha tags.
 
 on:
   workflow_dispatch:
   push:
     branches: [ "*" ]
-    tags: [ 'openbao-autounseal-*.*.*' ]
   pull_request:
     branches: [ "main" ]
 
@@ -52,8 +53,6 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=pr
-            type=ref,event=tag
-            type=match,pattern=openbao-autounseal-(.*),group=1
             type=sha,format=long
 
       - name: Build and push Docker image
