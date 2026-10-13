@@ -1,0 +1,127 @@
+name: Release
+
+# Release contract: bump `version` in charts/openbao-autounseal/Chart.yaml (and
+# `appVersion` when app.py changes), then merge to main. Push no tags by hand.
+# The image job publishes ghcr.io/vizzletf/openbao-autounseal:<appVersion>
+# before the chart job publishes the chart, so a released chart never points
+# at an image that does not exist. Tags pushed by chart-releaser use
+# GITHUB_TOKEN and start no other workflow, so the image is built here.
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: ["charts/**"]
+
+# Two quick merges must not race on gh-pages.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/vizzletf/openbao-autounseal
+
+jobs:
+  image:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      app: ${{ steps.version.outputs.app }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Read appVersion
+        id: version
+        run: |
+          app=$(sed -n 's/^appVersion:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}/\1/p' charts/openbao-autounseal/Chart.yaml)
+          test -n "$app" || { echo "::error::appVersion not found in Chart.yaml"; exit 1; }
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+
+      - name: Log into ghcr.io
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Version tags are immutable: build only when the tag is missing, and fail
+      # on any other registry error instead of overwriting a published image.
+      - name: Check whether the image exists
+        id: exists
+        env:
+          APP: ${{ steps.version.outputs.app }}
+        run: |
+          if out=$(docker buildx imagetools inspect "$IMAGE:$APP" 2>&1); then
+            echo "$IMAGE:$APP already published, skipping the build"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          elif grep -qi 'not found' <<<"$out"; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$out"
+            exit 1
+          fi
+
+      - name: Set up QEMU
+        if: steps.exists.outputs.found == 'false'
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # v3
+
+      - name: Set up Docker Buildx
+        if: steps.exists.outputs.found == 'false'
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
+
+      - name: Extract Docker metadata
+        if: steps.exists.outputs.found == 'false'
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051  # v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.app }}
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        if: steps.exists.outputs.found == 'false'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  chart:
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Require the image
+        env:
+          APP: ${{ needs.image.outputs.app }}
+        run: docker buildx imagetools inspect "$IMAGE:$APP"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310  # v5.0.1
+
+      - name: Lint chart
+        run: helm lint --strict charts/openbao-autounseal
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@a917fd15b20e8b64b94d9158ad54cd6345335584  # v1.6.0
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CR_SKIP_EXISTING: true

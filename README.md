@@ -114,7 +114,7 @@ Helm's [documentation](https://helm.sh/docs) to get started.
 
 Once Helm has been set up correctly, add the repo as follows:
 
-  helm repo add openbao-autounseal https://pytoshka.github.io/openbao-autounseal
+  helm repo add openbao-autounseal https://vizzletf.github.io/openbao_autounseal
 
 If you had already added this repo earlier, run `helm repo update` to retrieve
 the latest versions of the packages.  You can then run `helm search repo
@@ -127,5 +127,11 @@ To install the openbao-autounseal chart:
 To uninstall the chart:
 
     helm delete openbao-autounseal
+
+Chart values are documented in [charts/openbao-autounseal/README.md](charts/openbao-autounseal/README.md).
+
+## Releasing
+
+Bump `version` in `charts/openbao-autounseal/Chart.yaml` (and `appVersion` when `app.py` changes) and merge to `main`. Push no tags by hand: the `Release` workflow publishes `ghcr.io/vizzletf/openbao-autounseal:<appVersion>` first and only then the chart.
 
 <a href="https://www.buymeacoffee.com/vizzletf" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" height="60" width="217"></a>
